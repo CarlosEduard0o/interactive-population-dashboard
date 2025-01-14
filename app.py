@@ -3,36 +3,57 @@ import plotly.express as px
 import pandas as pd
 import psycopg2 as pc
 
-conn = pc.connect(
-    dbname="postgres",
-    user='postgres',
-    password='postgres',
-    host='localhost',
-    port='5432'
-)
+# Configuração de conexão com o banco de dados
+def get_data():
+    conn = pc.connect(
+        dbname="postgres",
+        user="postgres",
+        password="postgres",
+        host="localhost",
+        port="5432"
+    )
+    query = "SELECT * FROM populacao;"
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
 
-query = "SELECT * FROM populacao;"
+# Inicializa o Dash
+app = Dash(__name__)
 
-df = pd.read_sql(query, conn)
+# Layout da aplicação
+app.layout = html.Div([
+    html.H1(children="Title of Dash App", style={"textAlign": "center"}),
+    dcc.Dropdown(id="dropdown-selection", placeholder="Selecione um país"),
+    dcc.Graph(id="graph-content"),
+    dcc.Interval(
+        id="interval-component",
+        interval=10 * 1000,  # Atualiza a cada 10 segundos
+        n_intervals=0
+    )
+])
 
-conn.close()
-
-app = Dash()
-
-app.layout = [
-    html.H1(children='Title of Dash App', style={'textAlign':'center'}),
-    dcc.Dropdown(df.country.unique(), 'Canada', id='dropdown-selection'),
-    dcc.Graph(id='graph-content')
-]
-
+# Callback para atualizar as opções do dropdown com os países disponíveis
 @callback(
-    Output('graph-content', 'figure'),
-    Input('dropdown-selection', 'value')
+    Output("dropdown-selection", "options"),
+    Input("interval-component", "n_intervals")
 )
+def update_dropdown_options(n):
+    df = get_data()
+    return [{"label": country, "value": country} for country in df["country"].unique()]
 
-def update_graph(value):
-    dff = df[df.country==value]
-    return px.line(dff, x='year', y='pop')
+# Callback para atualizar o gráfico com base no país selecionado
+@callback(
+    Output("graph-content", "figure"),
+    [Input("dropdown-selection", "value"),
+     Input("interval-component", "n_intervals")]
+)
+def update_graph(value, n):
+    df = get_data()
+    if value:
+        dff = df[df["country"] == value]
+        return px.line(dff, x="year", y="pop", title=f"População de {value}")
+    return px.line(title="Selecione um país para visualizar os dados.")
 
-if __name__ == '__main__':
+# Executa a aplicação
+if __name__ == "__main__":
     app.run(debug=True)
